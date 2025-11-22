@@ -283,7 +283,6 @@ class NotionDbSide(SyncSide):
             while has_more:
                 query_params: dict[str, Any] = {
                     "database_id": self._database_id,
-                    "filter": {"property": "Archived", "checkbox": {"equals": False}},
                 }
                 if start_cursor:
                     query_params["start_cursor"] = start_cursor
@@ -292,7 +291,7 @@ class NotionDbSide(SyncSide):
 
                 # Process results
                 for page in response.get("results", []):
-                    # Skip archived pages (double-check)
+                    # Skip archived pages
                     if page.get("archived", False):
                         continue
 
@@ -418,7 +417,8 @@ class NotionDbSide(SyncSide):
 
         try:
             response: dict[str, Any] = self._client.pages.create(  # type: ignore
-                parent={"database_id": self._database_id}, properties=properties,
+                parent={"database_id": self._database_id},
+                properties=properties,
             )
 
             # Return fresh item parsed from response

@@ -246,9 +246,7 @@ def test_delete_single_item(mock_client):
 
     side.delete_single_item("test-page-id-1")
 
-    mock_client.pages.update.assert_called_once_with(
-        page_id="test-page-id-1", archived=True
-    )
+    mock_client.pages.update.assert_called_once_with(page_id="test-page-id-1", archived=True)
 
 
 def test_items_are_identical():
