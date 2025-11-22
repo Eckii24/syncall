@@ -328,6 +328,48 @@ def opt_notion_status_kind():
     )
 
 
+def opt_notion_map_project():
+    return click.option(
+        "--map-project",
+        "map_project",
+        type=str,
+        default=None,
+        help="Notion column name for Project property.",
+    )
+
+
+def opt_notion_map_priority():
+    return click.option(
+        "--map-priority",
+        "map_priority",
+        type=str,
+        default=None,
+        help="Notion column name for Priority property.",
+    )
+
+
+def opt_notion_project_kind():
+    return click.option(
+        "--project-kind",
+        "project_kind",
+        type=click.Choice(["select", "multi_select", "relation"], case_sensitive=False),
+        default="select",
+        help="Type of property used for project tracking.",
+    )
+
+
+def opt_notion_priority_map():
+    return click.option(
+        "--priority-map",
+        "priority_map",
+        multiple=True,
+        help=(
+            'Priority mapping in format "TW_PRIORITY:NOTION_VALUE" (e.g., "H:High"). Can be'
+            " specified multiple times."
+        ),
+    )
+
+
 # gkeep ---------------------------------------------------------------------------------------
 def opts_gkeep():
     def decorator(f):

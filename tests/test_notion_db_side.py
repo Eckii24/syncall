@@ -8,6 +8,7 @@ from dateutil.tz import tzutc
 from syncall.notion.notion_db_side import (
     NotionDbSide,
     NotionSideConfig,
+    ProjectMappingKind,
     StatusMappingKind,
 )
 
@@ -298,3 +299,305 @@ def test_create_status_property_select(mock_client):
 
     prop = side._create_status_property(False)
     assert prop == {"select": {"name": "To Do"}}
+
+
+# Tests for Project functionality
+def test_parse_project_property_select(mock_client):
+    """Test parsing project property with select type."""
+    side = NotionDbSide(mock_client, "test-db-id")
+    side._config.map_field_project = "Project"
+
+    props = {
+        "Project": {
+            "type": "select",
+            "select": {"name": "Work"},
+        }
+    }
+
+    project = side._parse_project_property(props)
+    assert project == "Work"
+
+
+def test_parse_project_property_multi_select(mock_client):
+    """Test parsing project property with multi-select type."""
+    config = NotionSideConfig(
+        map_field_project="Project",
+        project_mapping_kind=ProjectMappingKind.MULTI_SELECT,
+    )
+    side = NotionDbSide(mock_client, "test-db-id", config=config)
+
+    props = {
+        "Project": {
+            "type": "multi_select",
+            "multi_select": [{"name": "Personal"}, {"name": "Work"}],
+        }
+    }
+
+    project = side._parse_project_property(props)
+    assert project == "Personal"  # Takes first value
+
+
+def test_parse_project_property_relation(mock_client):
+    """Test parsing project property with relation type."""
+    config = NotionSideConfig(
+        map_field_project="Project",
+        project_mapping_kind=ProjectMappingKind.RELATION,
+    )
+    side = NotionDbSide(mock_client, "test-db-id", config=config)
+
+    props = {
+        "Project": {
+            "type": "relation",
+            "relation": [{"id": "related-page-id"}],
+        }
+    }
+
+    project = side._parse_project_property(props)
+    assert project == "related-page-id"
+
+
+def test_create_project_property_select(mock_client):
+    """Test creating project property with select type."""
+    config = NotionSideConfig(
+        map_field_project="Project",
+        project_mapping_kind=ProjectMappingKind.SELECT,
+    )
+    side = NotionDbSide(mock_client, "test-db-id", config=config)
+
+    prop = side._create_project_property("Work")
+    assert prop == {"select": {"name": "Work"}}
+
+
+def test_create_project_property_multi_select(mock_client):
+    """Test creating project property with multi-select type."""
+    config = NotionSideConfig(
+        map_field_project="Project",
+        project_mapping_kind=ProjectMappingKind.MULTI_SELECT,
+    )
+    side = NotionDbSide(mock_client, "test-db-id", config=config)
+
+    prop = side._create_project_property("Personal")
+    assert prop == {"multi_select": [{"name": "Personal"}]}
+
+
+# Tests for Priority functionality
+def test_parse_priority_property(mock_client):
+    """Test parsing priority property."""
+    config = NotionSideConfig(
+        map_field_priority="Priority",
+        priority_map={"H": "High", "M": "Medium", "L": "Low"},
+    )
+    side = NotionDbSide(mock_client, "test-db-id", config=config)
+
+    props = {
+        "Priority": {
+            "type": "select",
+            "select": {"name": "High"},
+        }
+    }
+
+    priority = side._parse_priority_property(props)
+    assert priority == "H"
+
+
+def test_parse_priority_property_medium(mock_client):
+    """Test parsing medium priority."""
+    config = NotionSideConfig(
+        map_field_priority="Priority",
+        priority_map={"H": "High", "M": "Medium", "L": "Low"},
+    )
+    side = NotionDbSide(mock_client, "test-db-id", config=config)
+
+    props = {
+        "Priority": {
+            "type": "select",
+            "select": {"name": "Medium"},
+        }
+    }
+
+    priority = side._parse_priority_property(props)
+    assert priority == "M"
+
+
+def test_create_priority_property(mock_client):
+    """Test creating priority property."""
+    config = NotionSideConfig(
+        map_field_priority="Priority",
+        priority_map={"H": "High", "M": "Medium", "L": "Low"},
+    )
+    side = NotionDbSide(mock_client, "test-db-id", config=config)
+
+    prop = side._create_priority_property("H")
+    assert prop == {"select": {"name": "High"}}
+
+    prop = side._create_priority_property("M")
+    assert prop == {"select": {"name": "Medium"}}
+
+    prop = side._create_priority_property("L")
+    assert prop == {"select": {"name": "Low"}}
+
+
+def test_page_to_item_with_project_and_priority(mock_client):
+    """Test converting page to item with project and priority."""
+    config = NotionSideConfig(
+        map_field_project="Project",
+        map_field_priority="Priority",
+        priority_map={"H": "High", "M": "Medium", "L": "Low"},
+    )
+    side = NotionDbSide(mock_client, "test-db-id", config=config)
+
+    page = {
+        "id": "test-page-id-3",
+        "archived": False,
+        "last_edited_time": "2021-12-04T10:01:00.000Z",
+        "properties": {
+            "Name": {
+                "id": "title",
+                "type": "title",
+                "title": [
+                    {
+                        "type": "text",
+                        "text": {"content": "Task with Project and Priority"},
+                        "plain_text": "Task with Project and Priority",
+                    }
+                ],
+            },
+            "Status": {
+                "id": "status",
+                "type": "status",
+                "status": {"name": "Not started"},
+            },
+            "Due Date": {"id": "due", "type": "date", "date": None},
+            "Project": {
+                "type": "select",
+                "select": {"name": "Work"},
+            },
+            "Priority": {
+                "type": "select",
+                "select": {"name": "High"},
+            },
+        },
+    }
+
+    item = side._page_to_item(page)
+    assert item["id"] == "test-page-id-3"
+    assert item["description"] == "Task with Project and Priority"
+    assert item["status"] == "pending"
+    assert item["project"] == "Work"
+    assert item["priority"] == "H"
+
+
+def test_add_item_with_project_and_priority(mock_client):
+    """Test adding item with project and priority."""
+    config = NotionSideConfig(
+        map_field_project="Project",
+        map_field_priority="Priority",
+        priority_map={"H": "High", "M": "Medium", "L": "Low"},
+    )
+    side = NotionDbSide(mock_client, "test-db-id", config=config)
+
+    # Mock response
+    mock_response = {
+        "id": "new-page-id",
+        "archived": False,
+        "last_edited_time": "2021-12-06T10:00:00.000Z",
+        "properties": {
+            "Name": {
+                "title": [{"plain_text": "New Task"}],
+            },
+            "Status": {
+                "status": {"name": "Not started"},
+            },
+            "Due Date": {"date": None},
+            "Project": {
+                "select": {"name": "Personal"},
+            },
+            "Priority": {
+                "select": {"name": "Medium"},
+            },
+        },
+    }
+
+    mock_client.pages.create.return_value = mock_response
+
+    new_item = {
+        "description": "New Task",
+        "status": "pending",
+        "project": "Personal",
+        "priority": "M",
+    }
+
+    result = side.add_item(new_item)
+    mock_client.pages.create.assert_called_once()
+
+    # Verify properties were created correctly
+    call_args = mock_client.pages.create.call_args
+    properties = call_args[1]["properties"]
+    assert "Project" in properties
+    assert properties["Project"] == {"select": {"name": "Personal"}}
+    assert "Priority" in properties
+    assert properties["Priority"] == {"select": {"name": "Medium"}}
+
+
+def test_update_item_with_project_and_priority(mock_client):
+    """Test updating item with project and priority."""
+    config = NotionSideConfig(
+        map_field_project="Project",
+        map_field_priority="Priority",
+        priority_map={"H": "High", "M": "Medium", "L": "Low"},
+    )
+    side = NotionDbSide(mock_client, "test-db-id", config=config)
+
+    side.update_item(
+        "test-page-id-1",
+        description="Updated Task",
+        status="completed",
+        project="Work",
+        priority="H",
+    )
+
+    mock_client.pages.update.assert_called_once()
+    call_args = mock_client.pages.update.call_args
+    properties = call_args[1]["properties"]
+
+    assert "Project" in properties
+    assert properties["Project"] == {"select": {"name": "Work"}}
+    assert "Priority" in properties
+    assert properties["Priority"] == {"select": {"name": "High"}}
+
+
+def test_converter_with_project_and_priority():
+    """Test converters handle project and priority."""
+    from syncall.tw_notion_db_utils import (
+        convert_notion_db_to_tw,
+        convert_tw_to_notion_db,
+    )
+    import datetime
+
+    # Test TW to Notion conversion
+    tw_item = {
+        "description": "Test task",
+        "status": "pending",
+        "modified": "20211204T100100Z",
+        "project": "Work",
+        "priority": "H",
+    }
+
+    notion_item = convert_tw_to_notion_db(tw_item)
+    assert notion_item["project"] == "Work"
+    assert notion_item["priority"] == "H"
+
+    # Test Notion to TW conversion
+    notion_item_test = {
+        "description": "Notion task",
+        "status": "completed",
+        "last_edited_time": datetime.datetime(
+            2021, 12, 4, 10, 1, tzinfo=datetime.timezone.utc
+        ),
+        "project": "Personal",
+        "priority": "M",
+    }
+
+    tw_item_back = convert_notion_db_to_tw(notion_item_test)
+    assert tw_item_back["project"] == "Personal"
+    assert tw_item_back["priority"] == "M"

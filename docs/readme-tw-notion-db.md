@@ -9,12 +9,16 @@ Upon execution, `tw_notion_db_sync` will synchronize, and on subsequent runs kee
 - Notion database page Title property <-> TW task description
 - Notion Status/Select/Checkbox property <-> TW task completion status
 - Notion Date property <-> TW task due date
+- Notion Project property (Select/Multi-select/Relation) <-> TW task project
+- Notion Priority property (Select) <-> TW task priority (H/M/L)
 - Page is archived <-> TW task deletion
 
 ## Key Features
 
 - **Schema Agnostic**: All column names are configurable via CLI options
 - **Type Flexible**: Supports Status, Select, or Checkbox properties for completion tracking
+- **Project Support**: Syncs with Select, Multi-select, or Relation properties for projects
+- **Priority Mapping**: Configurable priority mapping between TaskWarrior (H/M/L) and Notion select values
 - **Sensible Defaults**: Uses standard Notion template naming conventions ("Name", "Status", "Due Date")
 - **Pagination Support**: Efficiently handles databases with >100 items
 
@@ -61,6 +65,72 @@ tw_notion_db_sync \
   --database-id <database-uuid> \
   -t mytasks \
   --status-kind checkbox
+```
+
+### Project Synchronization
+
+Sync with a Project column using Select property:
+
+```sh
+tw_notion_db_sync \
+  --database-id <database-uuid> \
+  -t mytasks \
+  --map-project "Project" \
+  --project-kind select
+```
+
+For Multi-select project column:
+
+```sh
+tw_notion_db_sync \
+  --database-id <database-uuid> \
+  -t mytasks \
+  --map-project "Projects" \
+  --project-kind multi_select
+```
+
+For Relation project column (stores relation ID):
+
+```sh
+tw_notion_db_sync \
+  --database-id <database-uuid> \
+  -t mytasks \
+  --map-project "Project" \
+  --project-kind relation
+```
+
+### Priority Synchronization
+
+Sync with custom priority mappings:
+
+```sh
+tw_notion_db_sync \
+  --database-id <database-uuid> \
+  -t mytasks \
+  --map-priority "Priority" \
+  --priority-map "H:High" \
+  --priority-map "M:Medium" \
+  --priority-map "L:Low"
+```
+
+Note: Default priority mapping is `H:High`, `M:Medium`, `L:Low` if not specified.
+
+### Complete Example with All Fields
+
+```sh
+tw_notion_db_sync \
+  --database-id <database-uuid> \
+  -t mytasks \
+  --map-title "Task" \
+  --map-status "Status" \
+  --map-due "Due Date" \
+  --map-project "Project" \
+  --map-priority "Priority" \
+  --status-kind status_prop \
+  --project-kind select \
+  --priority-map "H:🔴 High" \
+  --priority-map "M:🟡 Medium" \
+  --priority-map "L:🟢 Low"
 ```
 
 ### Sync with Project
@@ -121,9 +191,13 @@ There are two ways `tw_notion_db_sync` can read the API token:
 - `--map-title`: Notion column name for the Title property (default: "Name")
 - `--map-status`: Notion column name for the Status property (default: "Status")
 - `--map-due`: Notion column name for the Due Date property (default: "Due Date")
+- `--map-project`: Notion column name for the Project property (optional)
+- `--map-priority`: Notion column name for the Priority property (optional)
 - `--status-kind`: Type of status property - `status_prop`, `select`, or `checkbox` (default: "status_prop")
+- `--project-kind`: Type of project property - `select`, `multi_select`, or `relation` (default: "select")
 - `--status-done`: Value(s) considered as completed (can be specified multiple times, default: "Done")
 - `--status-todo`: Value(s) considered as pending (can be specified multiple times, default: "Not started")
+- `--priority-map`: Priority mapping in format "TW_PRIORITY:NOTION_VALUE" (e.g., "H:High"). Can be specified multiple times. Default: H:High, M:Medium, L:Low
 
 ### Saving Configurations
 
@@ -149,14 +223,37 @@ Your Notion database should have at minimum:
 
 - A **Title** property (any name you choose)
 - A **Status/Select/Checkbox** property for tracking completion
-- Optionally, a **Date** property for due dates
+
+Optionally, you can add:
+
+- A **Date** property for due dates
+- A **Select/Multi-select/Relation** property for projects
+- A **Select** property for priority
 
 Example database structure:
 
-| Name (Title) | Status (Status) | Due Date (Date) |
-|--------------|-----------------|-----------------|
-| Task 1       | Not started     | 2024-01-15      |
-| Task 2       | Done            | 2024-01-20      |
+| Name (Title) | Status (Status) | Due Date (Date) | Project (Select) | Priority (Select) |
+|--------------|-----------------|-----------------|------------------|-------------------|
+| Task 1       | Not started     | 2024-01-15      | Work             | High              |
+| Task 2       | Done            | 2024-01-20      | Personal         | Medium            |
+
+### Priority Values
+
+The priority property should be a Select field in Notion with values corresponding to TaskWarrior priorities:
+
+- **H** (High) - Default maps to "High"
+- **M** (Medium) - Default maps to "Medium"  
+- **L** (Low) - Default maps to "Low"
+
+You can customize these mappings using the `--priority-map` option.
+
+### Project Property Types
+
+The project property can be one of three types:
+
+1. **Select**: Single project selection (recommended)
+2. **Multi-select**: Multiple projects (only first project is synced to TW)
+3. **Relation**: Related to another database (stores relation ID)
 
 ## Notes on this Synchronization
 
@@ -166,8 +263,14 @@ Example database structure:
   - Select/Multi-select dropdown
   - Checkbox
 - Date properties should be of type "Date" in Notion
+- Project property can be:
+  - Select (recommended)
+  - Multi-select (only first value is synced)
+  - Relation (stores relation ID, not title)
+- Priority property should be a Select field with customizable value mappings
 - Archived pages in Notion are treated as deleted tasks in Taskwarrior
 - When a Taskwarrior task is deleted, the corresponding Notion page is archived (not permanently deleted)
+- TaskWarrior priority values (H/M/L) are mapped to Notion select values via `--priority-map` option
 
 ## See also
 

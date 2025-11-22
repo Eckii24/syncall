@@ -23,6 +23,14 @@ class StatusMappingKind(str, Enum):
     CHECKBOX = "checkbox"
 
 
+class ProjectMappingKind(str, Enum):
+    """Enum for project mapping types."""
+
+    SELECT = "select"
+    MULTI_SELECT = "multi_select"
+    RELATION = "relation"
+
+
 @dataclass
 class NotionSideConfig:
     """Configuration for NotionDbSide schema mapping.
@@ -40,11 +48,20 @@ class NotionSideConfig:
     map_field_due: str = "Due Date"
     """The name of the property tracking the deadline."""
 
+    map_field_project: str | None = None
+    """(Optional) The name of the property tracking the project."""
+
+    map_field_priority: str | None = None
+    """(Optional) The name of the property tracking the priority."""
+
     map_field_url: str | None = None
     """(Optional) Property to store the URL/Link if needed."""
 
     status_mapping_kind: StatusMappingKind = StatusMappingKind.STATUS_PROP
     """Defines how status is stored: checkbox, select, or status_prop."""
+
+    project_mapping_kind: ProjectMappingKind = ProjectMappingKind.SELECT
+    """Defines how project is stored: select, multi_select, or relation."""
 
     val_status_todo: list[str] = field(default_factory=list)
     """Value(s) considered as pending."""
@@ -52,12 +69,17 @@ class NotionSideConfig:
     val_status_done: list[str] = field(default_factory=list)
     """Value(s) considered as completed."""
 
+    priority_map: dict[str, str] = field(default_factory=dict)
+    """Mapping from TaskWarrior priority (H/M/L) to Notion select values."""
+
     def __post_init__(self):
         """Initialize default values after dataclass initialization."""
         if not self.val_status_todo:
             self.val_status_todo = ["Not started"]
         if not self.val_status_done:
             self.val_status_done = ["Done"]
+        if not self.priority_map:
+            self.priority_map = {"H": "High", "M": "Medium", "L": "Low"}
 
 
 # Default configuration instance
@@ -187,6 +209,91 @@ class NotionDbSide(SyncSide):
 
         return parse_datetime(start_date)
 
+    def _parse_project_property(self, properties: dict) -> str | None:
+        """Parse the project property.
+
+        :param properties: Page properties dictionary
+        :return: Project name or None
+        """
+        if not self._config.map_field_project:
+            return None
+
+        project_prop = properties.get(self._config.map_field_project, {})
+        if not project_prop:
+            return None
+
+        prop_type = project_prop.get("type")
+
+        if (
+            prop_type == "select"
+            or self._config.project_mapping_kind == ProjectMappingKind.SELECT
+        ):
+            # Select dropdown
+            select_value = project_prop.get("select")
+            if select_value:
+                name = select_value.get("name")
+                return str(name) if name else None
+            return None
+
+        elif (
+            prop_type == "multi_select"
+            or self._config.project_mapping_kind == ProjectMappingKind.MULTI_SELECT
+        ):
+            # Multi-select - take first value
+            multi_select_values = project_prop.get("multi_select", [])
+            if multi_select_values:
+                name = multi_select_values[0].get("name")
+                return str(name) if name else None
+            return None
+
+        elif (
+            prop_type == "relation"
+            or self._config.project_mapping_kind == ProjectMappingKind.RELATION
+        ):
+            # Relation - we need to fetch the related page to get its title
+            # For now, we'll store the relation ID and handle it in a future update
+            # This requires additional API calls which we'll implement
+            relation_values = project_prop.get("relation", [])
+            if relation_values:
+                # Return the ID for now - ideally we'd fetch the title
+                rel_id = relation_values[0].get("id")
+                return str(rel_id) if rel_id else None
+            return None
+
+        logger.warning(f"Unknown project property type: {prop_type}")
+        return None
+
+    def _parse_priority_property(self, properties: dict) -> str | None:
+        """Parse the priority property.
+
+        :param properties: Page properties dictionary
+        :return: TaskWarrior priority (H/M/L) or None
+        """
+        if not self._config.map_field_priority:
+            return None
+
+        priority_prop = properties.get(self._config.map_field_priority, {})
+        if not priority_prop:
+            return None
+
+        # Priority is expected to be a Select property
+        select_value = priority_prop.get("select")
+        if not select_value:
+            return None
+
+        notion_priority = select_value.get("name", "")
+
+        # Reverse lookup in priority map to convert Notion value to TW value
+        for tw_priority, notion_value in self._config.priority_map.items():
+            if notion_value == notion_priority:
+                return tw_priority
+
+        logger.warning(
+            f"Unknown priority value: {notion_priority}, not in mapping"
+            f" {self._config.priority_map}"
+        )
+        return None
+
     def _create_title_property(self, title: str) -> dict:
         """Create a title property for Notion API.
 
@@ -242,6 +349,52 @@ class NotionDbSide(SyncSide):
             return {"date": None}
         return {"date": {"start": due.isoformat()}}
 
+    def _create_project_property(self, project: str | None) -> dict | None:
+        """Create a project property for Notion API.
+
+        :param project: Project name or None
+        :return: Property dictionary or None if no project
+        """
+        if not project or not self._config.map_field_project:
+            return None
+
+        if self._config.project_mapping_kind == ProjectMappingKind.SELECT:
+            return {"select": {"name": project}}
+
+        elif self._config.project_mapping_kind == ProjectMappingKind.MULTI_SELECT:
+            return {"multi_select": [{"name": project}]}
+
+        elif self._config.project_mapping_kind == ProjectMappingKind.RELATION:
+            # For relation, we would need to search for the page by title
+            # This requires additional API calls and database ID of the related database
+            # For now, we'll log a warning
+            logger.warning(
+                "Relation project mapping not yet fully implemented - requires page lookup"
+            )
+            return None
+
+        return None
+
+    def _create_priority_property(self, priority: str | None) -> dict | None:
+        """Create a priority property for Notion API.
+
+        :param priority: TaskWarrior priority (H/M/L) or None
+        :return: Property dictionary or None if no priority
+        """
+        if not priority or not self._config.map_field_priority:
+            return None
+
+        # Map TW priority to Notion select value
+        notion_priority = self._config.priority_map.get(priority)
+        if not notion_priority:
+            logger.warning(
+                f"Unknown TaskWarrior priority: {priority}, not in mapping"
+                f" {self._config.priority_map}"
+            )
+            return None
+
+        return {"select": {"name": notion_priority}}
+
     def _page_to_item(self, page: dict) -> ItemType:
         """Convert a Notion page to an internal item representation.
 
@@ -269,6 +422,16 @@ class NotionDbSide(SyncSide):
         due_date = self._parse_due_property(properties)
         if due_date:
             item["due"] = due_date
+
+        # Add project if present
+        project = self._parse_project_property(properties)
+        if project:
+            item["project"] = project
+
+        # Add priority if present
+        priority = self._parse_priority_property(properties)
+        if priority:
+            item["priority"] = priority
 
         return item
 
@@ -386,6 +549,16 @@ class NotionDbSide(SyncSide):
                 changes.get("due"),
             )
 
+        if "project" in changes and self._config.map_field_project:
+            project_prop = self._create_project_property(changes.get("project"))
+            if project_prop:
+                properties[self._config.map_field_project] = project_prop
+
+        if "priority" in changes and self._config.map_field_priority:
+            priority_prop = self._create_priority_property(changes.get("priority"))
+            if priority_prop:
+                properties[self._config.map_field_priority] = priority_prop
+
         if not properties:
             logger.warning(f"No valid properties to update for item {item_id}")
             return
@@ -421,6 +594,18 @@ class NotionDbSide(SyncSide):
         # Due date
         if "due" in item:
             properties[self._config.map_field_due] = self._create_due_property(item["due"])
+
+        # Project
+        if "project" in item and self._config.map_field_project:
+            project_prop = self._create_project_property(item.get("project"))
+            if project_prop:
+                properties[self._config.map_field_project] = project_prop
+
+        # Priority
+        if "priority" in item and self._config.map_field_priority:
+            priority_prop = self._create_priority_property(item.get("priority"))
+            if priority_prop:
+                properties[self._config.map_field_priority] = priority_prop
 
         try:
             response: dict[str, Any] = self._client.pages.create(  # type: ignore

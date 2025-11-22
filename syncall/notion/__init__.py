@@ -3,6 +3,7 @@ from syncall.notion.notion_db_side import (
     DEFAULT_CONFIG,
     NotionDbSide,
     NotionSideConfig,
+    ProjectMappingKind,
     StatusMappingKind,
 )
 from syncall.notion.notion_side import NotionSide
@@ -14,5 +15,6 @@ __all__ = [
     "NotionSide",
     "NotionSideConfig",
     "NotionTodoBlock",
+    "ProjectMappingKind",
     "StatusMappingKind",
 ]

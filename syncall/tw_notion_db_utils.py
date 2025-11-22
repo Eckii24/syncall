@@ -31,6 +31,14 @@ def convert_tw_to_notion_db(tw_item: TwItem) -> ItemType:
         elif isinstance(due, datetime.datetime):
             item["due"] = due
 
+    # Add project if present
+    if "project" in tw_item and tw_item["project"]:
+        item["project"] = tw_item["project"]
+
+    # Add priority if present
+    if "priority" in tw_item and tw_item["priority"]:
+        item["priority"] = tw_item["priority"]
+
     return item
 
 
@@ -60,5 +68,13 @@ def convert_notion_db_to_tw(notion_item: ItemType) -> TwItem:
             tw_item["due"] = format_datetime_tz(due)
         else:
             tw_item["due"] = due
+
+    # Add project if present
+    if "project" in notion_item and notion_item["project"]:
+        tw_item["project"] = notion_item["project"]
+
+    # Add priority if present
+    if "priority" in notion_item and notion_item["priority"]:
+        tw_item["priority"] = notion_item["priority"]
 
     return tw_item
