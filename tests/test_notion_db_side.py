@@ -89,13 +89,13 @@ def test_notion_db_side_init(mock_client):
     assert side._database_id == "test-db-id"
     # Test that default config is applied
     assert side._config.map_field_title == "Name"
-    assert side._config.status_map == {"pending": "Not started", "completed": "Done"}
+    assert side._config.status_map == {"pending": ["Not started"], "completed": ["Done"]}
 
 
 def test_notion_side_config_defaults():
     """Test NotionSideConfig default initialization."""
     config = NotionSideConfig()
-    assert config.status_map == {"pending": "Not started", "completed": "Done"}
+    assert config.status_map == {"pending": ["Not started"], "completed": ["Done"]}
     assert config.map_field_title == "Name"
     assert config.status_mapping_kind == StatusMappingKind.STATUS_PROP
 
@@ -106,7 +106,7 @@ def test_notion_db_side_with_custom_config(mock_client):
         map_field_title="Task Name",
         map_field_status="State",
         map_field_due="Deadline",
-        status_map={"pending": "To Do", "completed": "Complete"},
+        status_map={"pending": ["To Do", "In Progress"], "completed": ["Complete", "Done"]},
         status_mapping_kind=StatusMappingKind.SELECT,
     )
     side = NotionDbSide(mock_client, "test-db-id", config=config)
@@ -287,7 +287,7 @@ def test_create_status_property_select(mock_client):
     """Test creating status property with select type."""
     config = NotionSideConfig(
         status_mapping_kind=StatusMappingKind.SELECT,
-        status_map={"pending": "To Do", "completed": "Complete"},
+        status_map={"pending": ["To Do", "In Progress"], "completed": ["Complete", "Done"]},
     )
     side = NotionDbSide(mock_client, "test-db-id", config=config)
 
@@ -598,3 +598,96 @@ def test_converter_with_project_and_priority():
     tw_item_back = convert_notion_db_to_tw(notion_item_test)
     assert tw_item_back["project"] == "Personal"
     assert tw_item_back["priority"] == "M"
+
+
+def test_status_map_one_to_many(mock_client):
+    """Test 1:n status mapping - multiple Notion values map to same TW status."""
+    config = NotionSideConfig(
+        status_map={
+            "pending": ["Not started", "To Do", "In Progress"],
+            "completed": ["Done", "Complete", "Finished"],
+        }
+    )
+    side = NotionDbSide(mock_client, "test-db-id", config=config)
+
+    # Test parsing - all "completed" values should be recognized
+    test_cases = [
+        ("Done", True),
+        ("Complete", True),
+        ("Finished", True),
+        ("Not started", False),
+        ("To Do", False),
+        ("In Progress", False),
+    ]
+
+    for status_name, expected_completed in test_cases:
+        props = {
+            "Status": {
+                "type": "status",
+                "status": {"name": status_name},
+            }
+        }
+        result = side._parse_status_property(props)
+        assert result == expected_completed, f"Failed for status: {status_name}"
+
+    # Test creating - should use first value in the list
+    completed_prop = side._create_status_property(True)
+    assert completed_prop == {"status": {"name": "Done"}}
+
+    pending_prop = side._create_status_property(False)
+    assert pending_prop == {"status": {"name": "Not started"}}
+
+
+def test_parse_project_property_relation_with_title_lookup(mock_client):
+    """Test parsing project property with relation type and title lookup."""
+    config = NotionSideConfig(
+        map_field_project="Project",
+        project_mapping_kind=ProjectMappingKind.RELATION,
+    )
+    side = NotionDbSide(mock_client, "test-db-id", config=config)
+
+    # Mock the related page response
+    mock_related_page = {
+        "id": "related-page-id",
+        "properties": {
+            "Name": {
+                "type": "title",
+                "title": [{"plain_text": "Work Project"}],
+            }
+        },
+    }
+    mock_client.pages.retrieve.return_value = mock_related_page
+
+    props = {
+        "Project": {
+            "type": "relation",
+            "relation": [{"id": "related-page-id"}],
+        }
+    }
+
+    project = side._parse_project_property(props)
+    assert project == "Work Project"
+    mock_client.pages.retrieve.assert_called_once_with(page_id="related-page-id")
+
+
+def test_parse_project_property_relation_fallback_to_id(mock_client):
+    """Test relation parsing falls back to ID when title lookup fails."""
+    config = NotionSideConfig(
+        map_field_project="Project",
+        project_mapping_kind=ProjectMappingKind.RELATION,
+    )
+    side = NotionDbSide(mock_client, "test-db-id", config=config)
+
+    # Mock API error
+    mock_client.pages.retrieve.side_effect = Exception("API Error")
+
+    props = {
+        "Project": {
+            "type": "relation",
+            "relation": [{"id": "related-page-id"}],
+        }
+    }
+
+    project = side._parse_project_property(props)
+    # Should fallback to ID when API call fails
+    assert project == "related-page-id"

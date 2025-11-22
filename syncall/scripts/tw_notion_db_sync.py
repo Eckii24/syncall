@@ -270,13 +270,19 @@ def main(
     )
 
     # Create config
-    # Parse status map
-    parsed_status_map: dict[str, str] = {}
+    # Parse status map - supports 1:n relationship
+    parsed_status_map: dict[str, list[str]] = {}
     if status_map:
         for mapping in status_map:
             if ":" in mapping:
                 tw_status, notion_value = mapping.split(":", 1)
-                parsed_status_map[tw_status.strip()] = notion_value.strip()
+                tw_status = tw_status.strip()
+                notion_value = notion_value.strip()
+
+                # Support multiple Notion values for the same TW status
+                if tw_status not in parsed_status_map:
+                    parsed_status_map[tw_status] = []
+                parsed_status_map[tw_status].append(notion_value)
             else:
                 logger.warning(f"Invalid status mapping format: {mapping}, skipping")
 

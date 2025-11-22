@@ -58,6 +58,20 @@ tw_notion_db_sync \
   --status-map "pending:In Progress"
 ```
 
+For databases with multiple "done" states (1:n mapping):
+
+```sh
+tw_notion_db_sync \
+  --database-id <database-uuid> \
+  -t mytasks \
+  --status-kind select \
+  --status-map "completed:Done" \
+  --status-map "completed:Complete" \
+  --status-map "completed:Finished" \
+  --status-map "pending:Not started" \
+  --status-map "pending:To Do"
+```
+
 For databases using a Checkbox:
 
 ```sh
@@ -67,7 +81,7 @@ tw_notion_db_sync \
   --status-kind checkbox
 ```
 
-Note: Default status mapping is `pending:Not started`, `completed:Done` if not specified.
+Note: Default status mapping is `pending:Not started`, `completed:Done` if not specified. You can specify multiple Notion values for the same TaskWarrior status to support various naming conventions in your database.
 
 ### Project Synchronization
 
@@ -91,7 +105,7 @@ tw_notion_db_sync \
   --project-kind multi_select
 ```
 
-For Relation project column (stores relation ID):
+For Relation project column (fetches project title from related page):
 
 ```sh
 tw_notion_db_sync \
@@ -100,6 +114,8 @@ tw_notion_db_sync \
   --map-project "Project" \
   --project-kind relation
 ```
+
+Note: When using `relation` type, the tool will automatically fetch the related page and extract its title. If the API call fails, it will fallback to using the relation ID.
 
 ### Priority Synchronization
 
@@ -199,7 +215,7 @@ There are two ways `tw_notion_db_sync` can read the API token:
 - `--map-priority`: Notion column name for the Priority property (optional)
 - `--status-kind`: Type of status property - `status_prop`, `select`, or `checkbox` (default: "status_prop")
 - `--project-kind`: Type of project property - `select`, `multi_select`, or `relation` (default: "select")
-- `--status-map`: Status mapping in format "TW_STATUS:NOTION_VALUE" (e.g., "completed:Done", "pending:Not started"). Can be specified multiple times. Default: pending:Not started, completed:Done
+- `--status-map`: Status mapping in format "TW_STATUS:NOTION_VALUE" (e.g., "completed:Done", "pending:Not started"). Can be specified multiple times for 1:n mapping (multiple Notion values for same TW status). Default: pending:Not started, completed:Done
 - `--priority-map`: Priority mapping in format "TW_PRIORITY:NOTION_VALUE" (e.g., "H:High"). Can be specified multiple times. Default: H:High, M:Medium, L:Low
 
 ### Saving Configurations
@@ -256,7 +272,9 @@ The project property can be one of three types:
 
 1. **Select**: Single project selection (recommended)
 2. **Multi-select**: Multiple projects (only first project is synced to TW)
-3. **Relation**: Related to another database (stores relation ID)
+3. **Relation**: Related to another database - **automatically fetches the related page title**
+
+When using the Relation type, the tool will fetch the related page and extract its title property. If the API call fails or the title cannot be extracted, it will fall back to storing the relation ID.
 
 ## Notes on this Synchronization
 
@@ -265,11 +283,12 @@ The project property can be one of three types:
   - Native Status property (recommended)
   - Select/Multi-select dropdown
   - Checkbox
+- **Status mapping supports 1:n relationships**: You can map multiple Notion status values to the same TaskWarrior status (e.g., "Done", "Complete", and "Finished" all map to "completed")
 - Date properties should be of type "Date" in Notion
 - Project property can be:
   - Select (recommended)
   - Multi-select (only first value is synced)
-  - Relation (stores relation ID, not title)
+  - Relation (fetches related page title automatically)
 - Priority property should be a Select field with customizable value mappings
 - Archived pages in Notion are treated as deleted tasks in Taskwarrior
 - When a Taskwarrior task is deleted, the corresponding Notion page is archived (not permanently deleted)

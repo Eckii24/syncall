@@ -63,8 +63,12 @@ class NotionSideConfig:
     project_mapping_kind: ProjectMappingKind = ProjectMappingKind.SELECT
     """Defines how project is stored: select, multi_select, or relation."""
 
-    status_map: dict[str, str] = field(default_factory=dict)
-    """Mapping from TaskWarrior status (pending/completed) to Notion select values."""
+    status_map: dict[str, list[str]] = field(default_factory=dict)
+    """Mapping from TaskWarrior status (pending/completed) to Notion select values.
+    
+    Supports 1:n relationship - multiple Notion values can map to the same TW status.
+    Example: {"completed": ["Done", "Complete", "Finished"], "pending": ["Not started", "To Do"]}
+    """
 
     priority_map: dict[str, str] = field(default_factory=dict)
     """Mapping from TaskWarrior priority (H/M/L) to Notion select values."""
@@ -72,7 +76,7 @@ class NotionSideConfig:
     def __post_init__(self):
         """Initialize default values after dataclass initialization."""
         if not self.status_map:
-            self.status_map = {"pending": "Not started", "completed": "Done"}
+            self.status_map = {"pending": ["Not started"], "completed": ["Done"]}
         if not self.priority_map:
             self.priority_map = {"H": "High", "M": "Medium", "L": "Low"}
 
@@ -161,8 +165,8 @@ class NotionDbSide(SyncSide):
         ):
             # Native Status Property
             status_value = status_prop.get("status", {}).get("name", "")
-            completed_value = self._config.status_map.get("completed", "")
-            return bool(status_value == completed_value)
+            completed_values = self._config.status_map.get("completed", [])
+            return bool(status_value in completed_values)
 
         elif (
             prop_type == "select"
@@ -172,8 +176,8 @@ class NotionDbSide(SyncSide):
             select_value = status_prop.get("select")
             if select_value:
                 status_name = select_value.get("name", "")
-                completed_value = self._config.status_map.get("completed", "")
-                return bool(status_name == completed_value)
+                completed_values = self._config.status_map.get("completed", [])
+                return bool(status_name in completed_values)
             return False
 
         elif (
@@ -248,14 +252,40 @@ class NotionDbSide(SyncSide):
             prop_type == "relation"
             or self._config.project_mapping_kind == ProjectMappingKind.RELATION
         ):
-            # Relation - we need to fetch the related page to get its title
-            # For now, we'll store the relation ID and handle it in a future update
-            # This requires additional API calls which we'll implement
+            # Relation - fetch the related page to get its title
             relation_values = project_prop.get("relation", [])
             if relation_values:
-                # Return the ID for now - ideally we'd fetch the title
                 rel_id = relation_values[0].get("id")
-                return str(rel_id) if rel_id else None
+                if rel_id:
+                    try:
+                        # Fetch the related page to get its title
+                        related_page: dict[str, Any] = self._client.pages.retrieve(  # type: ignore
+                            page_id=rel_id
+                        )
+                        # Extract title from the related page
+                        if "properties" in related_page:
+                            props = related_page["properties"]
+                            for prop_name, prop_value in props.items():
+                                if (
+                                    isinstance(prop_value, dict)
+                                    and prop_value.get("type") == "title"
+                                ):
+                                    title_array = prop_value.get("title", [])
+                                    if title_array and isinstance(title_array, list):
+                                        first_title = title_array[0]
+                                        if isinstance(first_title, dict):
+                                            plain_text = first_title.get("plain_text", "")
+                                            return (
+                                                str(plain_text) if plain_text else str(rel_id)
+                                            )
+                        # Fallback to ID if title not found
+                        logger.warning(
+                            f"Could not extract title from related page {rel_id}, using ID"
+                        )
+                        return str(rel_id)
+                    except Exception as e:
+                        logger.error(f"Failed to fetch related page {rel_id}: {e}, using ID")
+                        return str(rel_id)
             return None
 
         logger.warning(f"Unknown project property type: {prop_type}")
@@ -306,11 +336,13 @@ class NotionDbSide(SyncSide):
         :param is_completed: Whether the item is completed
         :return: Property dictionary
         """
-        status_value = (
-            self._config.status_map.get("completed")
+        # Get the first value from the status map list
+        status_values = (
+            self._config.status_map.get("completed", ["Done"])
             if is_completed
-            else self._config.status_map.get("pending")
+            else self._config.status_map.get("pending", ["Not started"])
         )
+        status_value = status_values[0] if status_values else "Done"
 
         if self._config.status_mapping_kind == StatusMappingKind.STATUS_PROP:
             # Native Status Property
