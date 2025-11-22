@@ -86,6 +86,19 @@ def test_notion_db_side_init(mock_client):
     assert side.name == "NotionDb"
     assert side.fullname == "Notion Database"
     assert side._database_id == "test-db-id"
+    # Test that default config is applied
+    assert side._config.map_field_title == "Name"
+    assert side._config.val_status_done == ["Done"]
+    assert side._config.val_status_todo == ["Not started"]
+
+
+def test_notion_side_config_defaults():
+    """Test NotionSideConfig default initialization."""
+    config = NotionSideConfig()
+    assert config.val_status_done == ["Done"]
+    assert config.val_status_todo == ["Not started"]
+    assert config.map_field_title == "Name"
+    assert config.status_mapping_kind == StatusMappingKind.STATUS_PROP
 
 
 def test_notion_db_side_with_custom_config(mock_client):

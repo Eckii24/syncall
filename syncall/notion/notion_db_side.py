@@ -46,11 +46,18 @@ class NotionSideConfig:
     status_mapping_kind: StatusMappingKind = StatusMappingKind.STATUS_PROP
     """Defines how status is stored: checkbox, select, or status_prop."""
 
-    val_status_todo: list[str] = field(default_factory=lambda: ["Not started"])
+    val_status_todo: list[str] = field(default_factory=list)
     """Value(s) considered as pending."""
 
-    val_status_done: list[str] = field(default_factory=lambda: ["Done"])
+    val_status_done: list[str] = field(default_factory=list)
     """Value(s) considered as completed."""
+
+    def __post_init__(self):
+        """Initialize default values after dataclass initialization."""
+        if not self.val_status_todo:
+            self.val_status_todo = ["Not started"]
+        if not self.val_status_done:
+            self.val_status_done = ["Done"]
 
 
 # Default configuration instance
