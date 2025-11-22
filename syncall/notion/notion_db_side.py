@@ -435,7 +435,7 @@ class NotionDbSide(SyncSide):
         cls,
         item1: ItemType,
         item2: ItemType,
-        ignore_keys: Sequence[str] = [],
+        ignore_keys: Sequence[str] | None = None,
     ) -> bool:
         """Determine whether two items are identical.
 
@@ -444,6 +444,9 @@ class NotionDbSide(SyncSide):
         :param ignore_keys: Keys to ignore in comparison
         :return: True if items are identical, False otherwise
         """
+        if ignore_keys is None:
+            ignore_keys = []
+
         # Compare relevant keys
         keys_to_compare = ["description", "status", "due"]
         keys_to_compare = [k for k in keys_to_compare if k not in ignore_keys]

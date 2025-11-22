@@ -222,7 +222,9 @@ def main(
             sys.exit(1)
         token_v2 = fetch_from_pass_manager(token_pass_path)
 
-    assert token_v2
+    if not token_v2:
+        logger.error("Failed to retrieve Notion API token")
+        sys.exit(1)
 
     # teardown function and exception handling ------------------------------------------------
     register_teardown_handler(
