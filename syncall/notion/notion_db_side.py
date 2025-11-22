@@ -31,6 +31,13 @@ class ProjectMappingKind(str, Enum):
     RELATION = "relation"
 
 
+class DescriptionKind(str, Enum):
+    """Enum for description/annotation types."""
+
+    FIELD = "field"
+    PAGE = "page"
+
+
 @dataclass
 class NotionSideConfig:
     """Configuration for NotionDbSide schema mapping.
@@ -54,6 +61,9 @@ class NotionSideConfig:
     map_field_priority: str | None = None
     """(Optional) The name of the property tracking the priority."""
 
+    map_field_description: str | None = None
+    """(Optional) The name of the property for description/annotation (used when description_kind is 'field')."""
+
     map_field_url: str | None = None
     """(Optional) Property to store the URL/Link if needed."""
 
@@ -62,6 +72,9 @@ class NotionSideConfig:
 
     project_mapping_kind: ProjectMappingKind = ProjectMappingKind.SELECT
     """Defines how project is stored: select, multi_select, or relation."""
+
+    description_kind: DescriptionKind = DescriptionKind.PAGE
+    """Defines how description/annotation is handled: field or page (default: page)."""
 
     status_map: dict[str, list[str]] = field(default_factory=dict)
     """Mapping from TaskWarrior status (pending/completed) to Notion select values.
@@ -322,6 +335,131 @@ class NotionDbSide(SyncSide):
         )
         return None
 
+    def _parse_annotation_from_field(self, properties: dict) -> list[str]:
+        """Parse annotation from a Notion field property.
+
+        :param properties: Page properties dictionary
+        :return: List of annotations (single annotation from the field)
+        """
+        if not self._config.map_field_description:
+            return []
+
+        desc_prop = properties.get(self._config.map_field_description, {})
+        if not desc_prop:
+            return []
+
+        # Support different property types for description field
+        prop_type = desc_prop.get("type")
+
+        if prop_type == "rich_text":
+            rich_text_array = desc_prop.get("rich_text", [])
+            if rich_text_array:
+                text = "".join([rt.get("plain_text", "") for rt in rich_text_array])
+                return [text] if text.strip() else []
+
+        elif prop_type == "title":
+            title_array = desc_prop.get("title", [])
+            if title_array:
+                text = "".join([t.get("plain_text", "") for t in title_array])
+                return [text] if text.strip() else []
+
+        return []
+
+    def _parse_annotation_from_page(self, page_id: str) -> list[str]:
+        """Parse annotation from Notion page content by rendering blocks.
+
+        :param page_id: ID of the Notion page
+        :return: List of annotations (page content as annotation)
+        """
+        try:
+            # Fetch page blocks
+            blocks_response: dict[str, Any] = self._client.blocks.children.list(  # type: ignore
+                block_id=page_id
+            )
+            blocks = blocks_response.get("results", [])
+
+            if not blocks:
+                return []
+
+            # Render blocks to text
+            lines = []
+            for block in blocks:
+                block_type = block.get("type")
+                if not block_type:
+                    continue
+
+                block_content = block.get(block_type, {})
+
+                # Handle different block types
+                if block_type == "paragraph":
+                    rich_text = block_content.get("rich_text", [])
+                    text = "".join([rt.get("plain_text", "") for rt in rich_text])
+                    if text.strip():
+                        lines.append(text)
+
+                elif block_type in ["heading_1", "heading_2", "heading_3"]:
+                    rich_text = block_content.get("rich_text", [])
+                    text = "".join([rt.get("plain_text", "") for rt in rich_text])
+                    if text.strip():
+                        prefix = "#" * int(block_type[-1])
+                        lines.append(f"{prefix} {text}")
+
+                elif block_type == "bulleted_list_item":
+                    rich_text = block_content.get("rich_text", [])
+                    text = "".join([rt.get("plain_text", "") for rt in rich_text])
+                    if text.strip():
+                        lines.append(f"• {text}")
+
+                elif block_type == "numbered_list_item":
+                    rich_text = block_content.get("rich_text", [])
+                    text = "".join([rt.get("plain_text", "") for rt in rich_text])
+                    if text.strip():
+                        lines.append(f"- {text}")
+
+                elif block_type == "to_do":
+                    rich_text = block_content.get("rich_text", [])
+                    checked = block_content.get("checked", False)
+                    text = "".join([rt.get("plain_text", "") for rt in rich_text])
+                    if text.strip():
+                        checkbox = "[x]" if checked else "[ ]"
+                        lines.append(f"{checkbox} {text}")
+
+                elif block_type == "code":
+                    rich_text = block_content.get("rich_text", [])
+                    text = "".join([rt.get("plain_text", "") for rt in rich_text])
+                    if text.strip():
+                        lang = block_content.get("language", "")
+                        lines.append(f"```{lang}")
+                        lines.append(text)
+                        lines.append("```")
+
+            # Return as single annotation if we have content
+            if lines:
+                return ["\n".join(lines)]
+
+            return []
+
+        except Exception as e:
+            logger.error(f"Failed to fetch page content for {page_id}: {e}")
+            return []
+
+    def _parse_annotations(self, page: dict) -> list[str]:
+        """Parse annotations from Notion page based on configuration.
+
+        :param page: Notion page object
+        :return: List of annotations
+        """
+        if self._config.description_kind == DescriptionKind.FIELD:
+            # Get annotation from a specific field
+            properties = page.get("properties", {})
+            return self._parse_annotation_from_field(properties)
+        else:
+            # Get annotation from page content (default)
+            page_id = page.get("id")
+            if page_id:
+                return self._parse_annotation_from_page(page_id)
+            return []
+
     def _create_title_property(self, title: str) -> dict:
         """Create a title property for Notion API.
 
@@ -385,13 +523,8 @@ class NotionDbSide(SyncSide):
             return {"multi_select": [{"name": project}]}
 
         elif self._config.project_mapping_kind == ProjectMappingKind.RELATION:
-            # For relation, we would need to search for the page by title
-            # This requires additional API calls and database ID of the related database
-            # For now, we'll log a warning
-            logger.warning(
-                "Relation project mapping not yet fully implemented - requires page lookup"
-            )
-            return None
+            # Assume project is a relation ID
+            return {"relation": [{"id": project}]}
 
         return None
 
@@ -452,6 +585,11 @@ class NotionDbSide(SyncSide):
         priority = self._parse_priority_property(properties)
         if priority:
             item["priority"] = priority
+
+        # Add annotations based on configuration
+        annotations = self._parse_annotations(page)
+        if annotations:
+            item["annotations"] = annotations
 
         return item
 
@@ -660,7 +798,7 @@ class NotionDbSide(SyncSide):
             ignore_keys = []
 
         # Compare relevant keys
-        keys_to_compare = ["description", "status", "due"]
+        keys_to_compare = ["description", "status", "due", "project", "priority"]
         keys_to_compare = [k for k in keys_to_compare if k not in ignore_keys]
 
         return cls._items_are_identical(item1, item2, keys_to_compare)

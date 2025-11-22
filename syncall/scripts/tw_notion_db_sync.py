@@ -25,6 +25,7 @@ try:
         NotionSideConfig,
         ProjectMappingKind,
         StatusMappingKind,
+        DescriptionKind,
     )
     from syncall.taskwarrior.taskwarrior_side import TaskWarriorSide
 except ImportError:
@@ -43,6 +44,8 @@ from syncall.app_utils import (
 )
 from syncall.cli import (
     opt_notion_database_id,
+    opt_notion_description_kind,
+    opt_notion_map_description,
     opt_notion_map_due,
     opt_notion_map_priority,
     opt_notion_map_project,
@@ -82,10 +85,12 @@ def main(
     map_due: str,
     map_project: str,
     map_priority: str,
+    map_description: str | None,
     status_map: tuple[str],
     status_kind: str,
     project_kind: str,
     priority_map: tuple[str],
+    description_kind: str,
     tw_filter: str,
     tw_tags: list[str],
     tw_project: str,
@@ -154,10 +159,12 @@ def main(
         map_due = app_config.get("map_due", map_due)
         map_project = app_config.get("map_project", map_project)
         map_priority = app_config.get("map_priority", map_priority)
+        map_description = app_config.get("map_description", map_description)
         status_map = app_config.get("status_map", status_map)
         status_kind = app_config.get("status_kind", status_kind)
         project_kind = app_config.get("project_kind", project_kind)
         priority_map = app_config.get("priority_map", priority_map)
+        description_kind = app_config.get("description_kind", description_kind)
 
     # combination manually specified ----------------------------------------------------------
     else:
@@ -168,15 +175,18 @@ def main(
                 "tw_filter_li": tw_filter_li,
                 "tw_project": tw_project,
                 "tw_tags": tw_tags,
+                "tw_sync_all_tasks": tw_sync_all_tasks,
                 "map_title": map_title,
                 "map_status": map_status,
                 "map_due": map_due,
                 "map_project": map_project,
                 "map_priority": map_priority,
+                "map_description": map_description,
                 "status_map": list(status_map),
                 "status_kind": status_kind,
                 "project_kind": project_kind,
                 "priority_map": list(priority_map),
+                "description_kind": description_kind,
             },
             config_fname="tw_notion_db_configs",
             custom_combination_savename=custom_combination_savename,
@@ -213,10 +223,12 @@ def main(
                 "Notion Due Field": map_due,
                 "Notion Project Field": map_project or "(Not configured)",
                 "Notion Priority Field": map_priority or "(Not configured)",
+                "Notion Description Field": map_description or "(Not configured)",
                 "Status Map": list(status_map) if status_map else "(Using defaults)",
                 "Status Kind": status_kind,
                 "Project Kind": project_kind,
                 "Priority Map": list(priority_map) if priority_map else "(Using defaults)",
+                "Description Kind": description_kind,
                 "Prefer scheduled dates": prefer_scheduled_date,
             },
             prefix="\n\n",
@@ -302,10 +314,12 @@ def main(
         map_field_due=map_due,
         map_field_project=map_project if map_project else None,
         map_field_priority=map_priority if map_priority else None,
+        map_field_description=map_description if map_description else None,
         status_map=parsed_status_map if parsed_status_map else {},
         status_mapping_kind=StatusMappingKind(status_kind),
         project_mapping_kind=ProjectMappingKind(project_kind),
         priority_map=parsed_priority_map if parsed_priority_map else {},
+        description_kind=DescriptionKind(description_kind),
     )
 
     notion_side = NotionDbSide(client=client, database_id=database_id, config=notion_config)

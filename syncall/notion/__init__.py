@@ -5,6 +5,7 @@ from syncall.notion.notion_db_side import (
     NotionSideConfig,
     ProjectMappingKind,
     StatusMappingKind,
+    DescriptionKind,
 )
 from syncall.notion.notion_side import NotionSide
 from syncall.notion.notion_todo_block import NotionTodoBlock
@@ -17,4 +18,5 @@ __all__ = [
     "NotionTodoBlock",
     "ProjectMappingKind",
     "StatusMappingKind",
+    "DescriptionKind",
 ]

@@ -1,9 +1,8 @@
 """Tests for NotionDbSide implementation."""
 import datetime
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 
 import pytest
-from dateutil.tz import tzutc
 
 from syncall.notion.notion_db_side import (
     NotionDbSide,
@@ -516,6 +515,9 @@ def test_add_item_with_project_and_priority(mock_client):
     }
 
     mock_client.pages.create.return_value = mock_response
+    
+    # Mock blocks.children.list to return empty blocks (no page content)
+    mock_client.blocks.children.list.return_value = {"results": []}
 
     new_item = {
         "description": "New Task",
@@ -525,6 +527,14 @@ def test_add_item_with_project_and_priority(mock_client):
     }
 
     result = side.add_item(new_item)
+    
+    # Verify the returned item has expected structure (parsed from response)
+    assert result["id"] == "new-page-id"
+    assert result["description"] == "New Task"
+    assert result["status"] == "pending"
+    assert result["project"] == "Personal"
+    assert result["priority"] == "M"
+    
     mock_client.pages.create.assert_called_once()
 
     # Verify properties were created correctly

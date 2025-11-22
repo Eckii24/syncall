@@ -362,6 +362,31 @@ def opt_notion_priority_map():
     )
 
 
+def opt_notion_map_description():
+    return click.option(
+        "--map-description",
+        "map_description",
+        default=None,
+        help=(
+            "Notion column name for the Description/Annotation field (only used when"
+            ' --description-kind is "field").'
+        ),
+    )
+
+
+def opt_notion_description_kind():
+    return click.option(
+        "--description-kind",
+        "description_kind",
+        default="page",
+        type=click.Choice(["field", "page"], case_sensitive=False),
+        help=(
+            'How to handle annotations: "field" uses a Notion field, "page" (default) renders'
+            " the page content."
+        ),
+    )
+
+
 # gkeep ---------------------------------------------------------------------------------------
 def opts_gkeep():
     def decorator(f):
