@@ -258,6 +258,135 @@ def opt_notion_token_pass_path():
     )
 
 
+def opt_notion_database_id():
+    return click.option(
+        "-d",
+        "--database-id",
+        "database_id",
+        type=str,
+        help="Database ID of the Notion database to synchronize.",
+    )
+
+
+def opt_notion_map_title():
+    return click.option(
+        "--map-title",
+        "map_title",
+        type=str,
+        default="Name",
+        help="Notion column name for Title property.",
+    )
+
+
+def opt_notion_map_status():
+    return click.option(
+        "--map-status",
+        "map_status",
+        type=str,
+        default="Status",
+        help="Notion column name for Status property.",
+    )
+
+
+def opt_notion_map_due():
+    return click.option(
+        "--map-due",
+        "map_due",
+        type=str,
+        default="Due Date",
+        help="Notion column name for Due Date property.",
+    )
+
+
+def opt_notion_status_map():
+    return click.option(
+        "--status-map",
+        "status_map",
+        multiple=True,
+        help=(
+            'Status mapping in format "TW_STATUS:NOTION_VALUE" (e.g., "completed:Done",'
+            ' "pending:Not started"). Can be specified multiple times.'
+        ),
+    )
+
+
+def opt_notion_status_kind():
+    return click.option(
+        "--status-kind",
+        "status_kind",
+        type=click.Choice(["status_prop", "select", "checkbox"], case_sensitive=False),
+        default="status_prop",
+        help="Type of property used for status tracking.",
+    )
+
+
+def opt_notion_map_project():
+    return click.option(
+        "--map-project",
+        "map_project",
+        type=str,
+        default=None,
+        help="Notion column name for Project property.",
+    )
+
+
+def opt_notion_map_priority():
+    return click.option(
+        "--map-priority",
+        "map_priority",
+        type=str,
+        default=None,
+        help="Notion column name for Priority property.",
+    )
+
+
+def opt_notion_project_kind():
+    return click.option(
+        "--project-kind",
+        "project_kind",
+        type=click.Choice(["select", "multi_select", "relation"], case_sensitive=False),
+        default="select",
+        help="Type of property used for project tracking.",
+    )
+
+
+def opt_notion_priority_map():
+    return click.option(
+        "--priority-map",
+        "priority_map",
+        multiple=True,
+        help=(
+            'Priority mapping in format "TW_PRIORITY:NOTION_VALUE" (e.g., "H:High"). Can be'
+            " specified multiple times."
+        ),
+    )
+
+
+def opt_notion_map_description():
+    return click.option(
+        "--map-description",
+        "map_description",
+        default=None,
+        help=(
+            "Notion column name for the Description/Annotation field (only used when"
+            ' --description-kind is "field").'
+        ),
+    )
+
+
+def opt_notion_description_kind():
+    return click.option(
+        "--description-kind",
+        "description_kind",
+        default="page",
+        type=click.Choice(["field", "page"], case_sensitive=False),
+        help=(
+            'How to handle annotations: "field" uses a Notion field, "page" (default) renders'
+            " the page content."
+        ),
+    )
+
+
 # gkeep ---------------------------------------------------------------------------------------
 def opts_gkeep():
     def decorator(f):

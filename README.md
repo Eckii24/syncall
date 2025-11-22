@@ -65,6 +65,11 @@ At the moment the list of supported synchronizations is the following:
     <td><tt>tw-notion-sync</tt></td>
   </tr>
   <tr>
+    <td><a href="https://github.com/bergercookie/syncall/blob/master/docs/readme-tw-notion-db.md">README</a></td>
+    <td> <a href="https://taskwarrior.org/">Taskwarrior</a> ⬄ <a href="https://notion.so">Notion Databases</a></td>
+    <td><tt>tw-notion-db-sync</tt></td>
+  </tr>
+  <tr>
     <td><a href="https://github.com/bergercookie/syncall/blob/master/docs/readme-tw-gkeep.md">README</a></td>
     <td> <a href="https://taskwarrior.org/">Taskwarrior</a> ⬄ <a href="https://www.google.com/keep/">Google Keep Checkboxes</a></td>
     <td><tt>tw-gkeep-sync</tt></td>
