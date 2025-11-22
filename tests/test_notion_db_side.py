@@ -1,0 +1,289 @@
+"""Tests for NotionDbSide implementation."""
+import datetime
+from unittest.mock import Mock, MagicMock
+
+import pytest
+from dateutil.tz import tzutc
+
+from syncall.notion.notion_db_side import (
+    NotionDbSide,
+    NotionSideConfig,
+    StatusMappingKind,
+)
+
+
+@pytest.fixture
+def mock_client():
+    """Create a mock Notion client."""
+    return Mock()
+
+
+@pytest.fixture
+def notion_db_page_status_prop():
+    """Sample Notion database page with status property."""
+    return {
+        "id": "test-page-id-1",
+        "archived": False,
+        "last_edited_time": "2021-12-04T10:01:00.000Z",
+        "properties": {
+            "Name": {
+                "id": "title",
+                "type": "title",
+                "title": [
+                    {
+                        "type": "text",
+                        "text": {"content": "Test Task"},
+                        "plain_text": "Test Task",
+                    }
+                ],
+            },
+            "Status": {
+                "id": "status",
+                "type": "status",
+                "status": {"name": "Not started"},
+            },
+            "Due Date": {
+                "id": "due",
+                "type": "date",
+                "date": {"start": "2021-12-10T00:00:00.000Z"},
+            },
+        },
+    }
+
+
+@pytest.fixture
+def notion_db_page_completed():
+    """Sample Notion database page with completed status."""
+    return {
+        "id": "test-page-id-2",
+        "archived": False,
+        "last_edited_time": "2021-12-05T15:30:00.000Z",
+        "properties": {
+            "Name": {
+                "id": "title",
+                "type": "title",
+                "title": [
+                    {
+                        "type": "text",
+                        "text": {"content": "Completed Task"},
+                        "plain_text": "Completed Task",
+                    }
+                ],
+            },
+            "Status": {
+                "id": "status",
+                "type": "status",
+                "status": {"name": "Done"},
+            },
+            "Due Date": {"id": "due", "type": "date", "date": None},
+        },
+    }
+
+
+def test_notion_db_side_init(mock_client):
+    """Test NotionDbSide initialization."""
+    side = NotionDbSide(mock_client, "test-db-id")
+    assert side.name == "NotionDb"
+    assert side.fullname == "Notion Database"
+    assert side._database_id == "test-db-id"
+
+
+def test_notion_db_side_with_custom_config(mock_client):
+    """Test NotionDbSide with custom configuration."""
+    config = NotionSideConfig(
+        map_field_title="Task Name",
+        map_field_status="State",
+        map_field_due="Deadline",
+        val_status_done=["Complete", "Finished"],
+        status_mapping_kind=StatusMappingKind.SELECT,
+    )
+    side = NotionDbSide(mock_client, "test-db-id", config=config)
+    assert side._config.map_field_title == "Task Name"
+    assert side._config.map_field_status == "State"
+    assert side._config.status_mapping_kind == StatusMappingKind.SELECT
+
+
+def test_parse_title_property(mock_client, notion_db_page_status_prop):
+    """Test parsing title property."""
+    side = NotionDbSide(mock_client, "test-db-id")
+    title = side._parse_title_property(notion_db_page_status_prop["properties"])
+    assert title == "Test Task"
+
+
+def test_parse_title_property_empty(mock_client):
+    """Test parsing empty title property."""
+    side = NotionDbSide(mock_client, "test-db-id")
+    props = {"Name": {"title": []}}
+    title = side._parse_title_property(props)
+    assert title == "(No Title)"
+
+
+def test_parse_status_property_not_started(mock_client, notion_db_page_status_prop):
+    """Test parsing status property with 'Not started' value."""
+    side = NotionDbSide(mock_client, "test-db-id")
+    is_completed = side._parse_status_property(notion_db_page_status_prop["properties"])
+    assert is_completed is False
+
+
+def test_parse_status_property_done(mock_client, notion_db_page_completed):
+    """Test parsing status property with 'Done' value."""
+    side = NotionDbSide(mock_client, "test-db-id")
+    is_completed = side._parse_status_property(notion_db_page_completed["properties"])
+    assert is_completed is True
+
+
+def test_parse_due_property(mock_client, notion_db_page_status_prop):
+    """Test parsing due date property."""
+    side = NotionDbSide(mock_client, "test-db-id")
+    due = side._parse_due_property(notion_db_page_status_prop["properties"])
+    assert due is not None
+    assert isinstance(due, datetime.datetime)
+
+
+def test_parse_due_property_none(mock_client, notion_db_page_completed):
+    """Test parsing None due date property."""
+    side = NotionDbSide(mock_client, "test-db-id")
+    due = side._parse_due_property(notion_db_page_completed["properties"])
+    assert due is None
+
+
+def test_page_to_item(mock_client, notion_db_page_status_prop):
+    """Test converting Notion page to item."""
+    side = NotionDbSide(mock_client, "test-db-id")
+    item = side._page_to_item(notion_db_page_status_prop)
+
+    assert item["id"] == "test-page-id-1"
+    assert item["description"] == "Test Task"
+    assert item["status"] == "pending"
+    assert "due" in item
+    assert isinstance(item["last_edited_time"], datetime.datetime)
+
+
+def test_page_to_item_completed(mock_client, notion_db_page_completed):
+    """Test converting completed Notion page to item."""
+    side = NotionDbSide(mock_client, "test-db-id")
+    item = side._page_to_item(notion_db_page_completed)
+
+    assert item["id"] == "test-page-id-2"
+    assert item["description"] == "Completed Task"
+    assert item["status"] == "completed"
+    assert "due" not in item  # No due date set
+
+
+def test_get_all_items(mock_client, notion_db_page_status_prop, notion_db_page_completed):
+    """Test get_all_items method."""
+    side = NotionDbSide(mock_client, "test-db-id")
+
+    # Mock the database query response
+    mock_client.databases.query.return_value = {
+        "results": [notion_db_page_status_prop, notion_db_page_completed],
+        "has_more": False,
+        "next_cursor": None,
+    }
+
+    items = side.get_all_items()
+
+    assert len(items) == 2
+    assert items[0]["id"] == "test-page-id-1"
+    assert items[1]["id"] == "test-page-id-2"
+    mock_client.databases.query.assert_called_once()
+
+
+def test_get_all_items_with_pagination(mock_client, notion_db_page_status_prop):
+    """Test get_all_items with pagination."""
+    side = NotionDbSide(mock_client, "test-db-id")
+
+    # Mock paginated responses
+    mock_client.databases.query.side_effect = [
+        {
+            "results": [notion_db_page_status_prop],
+            "has_more": True,
+            "next_cursor": "cursor-1",
+        },
+        {
+            "results": [notion_db_page_status_prop],
+            "has_more": False,
+            "next_cursor": None,
+        },
+    ]
+
+    items = side.get_all_items()
+
+    assert len(items) == 2
+    assert mock_client.databases.query.call_count == 2
+
+
+def test_add_item(mock_client, notion_db_page_status_prop):
+    """Test adding an item."""
+    side = NotionDbSide(mock_client, "test-db-id")
+
+    # Mock the create response
+    mock_client.pages.create.return_value = notion_db_page_status_prop
+
+    new_item = {"description": "New Task", "status": "pending"}
+    result = side.add_item(new_item)
+
+    assert result["id"] == "test-page-id-1"
+    assert result["description"] == "Test Task"
+    mock_client.pages.create.assert_called_once()
+
+
+def test_update_item(mock_client):
+    """Test updating an item."""
+    side = NotionDbSide(mock_client, "test-db-id")
+
+    side.update_item("test-page-id-1", description="Updated Task", status="completed")
+
+    mock_client.pages.update.assert_called_once()
+    call_args = mock_client.pages.update.call_args
+    assert call_args[1]["page_id"] == "test-page-id-1"
+    assert "properties" in call_args[1]
+
+
+def test_delete_single_item(mock_client):
+    """Test deleting (archiving) an item."""
+    side = NotionDbSide(mock_client, "test-db-id")
+
+    side.delete_single_item("test-page-id-1")
+
+    mock_client.pages.update.assert_called_once_with(
+        page_id="test-page-id-1", archived=True
+    )
+
+
+def test_items_are_identical():
+    """Test items_are_identical class method."""
+    item1 = {"id": "1", "description": "Task", "status": "pending"}
+    item2 = {"id": "1", "description": "Task", "status": "pending"}
+    item3 = {"id": "1", "description": "Different", "status": "pending"}
+
+    assert NotionDbSide.items_are_identical(item1, item2)
+    assert not NotionDbSide.items_are_identical(item1, item3)
+
+
+def test_create_status_property_checkbox(mock_client):
+    """Test creating status property with checkbox type."""
+    config = NotionSideConfig(status_mapping_kind=StatusMappingKind.CHECKBOX)
+    side = NotionDbSide(mock_client, "test-db-id", config=config)
+
+    prop = side._create_status_property(True)
+    assert prop == {"checkbox": True}
+
+    prop = side._create_status_property(False)
+    assert prop == {"checkbox": False}
+
+
+def test_create_status_property_select(mock_client):
+    """Test creating status property with select type."""
+    config = NotionSideConfig(
+        status_mapping_kind=StatusMappingKind.SELECT,
+        val_status_done=["Complete"],
+        val_status_todo=["To Do"],
+    )
+    side = NotionDbSide(mock_client, "test-db-id", config=config)
+
+    prop = side._create_status_property(True)
+    assert prop == {"select": {"name": "Complete"}}
+
+    prop = side._create_status_property(False)
+    assert prop == {"select": {"name": "To Do"}}

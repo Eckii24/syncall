@@ -258,6 +258,76 @@ def opt_notion_token_pass_path():
     )
 
 
+def opt_notion_database_id():
+    return click.option(
+        "-d",
+        "--database-id",
+        "database_id",
+        type=str,
+        help="Database ID of the Notion database to synchronize.",
+    )
+
+
+def opt_notion_map_title():
+    return click.option(
+        "--map-title",
+        "map_title",
+        type=str,
+        default="Name",
+        help="Notion column name for Title property.",
+    )
+
+
+def opt_notion_map_status():
+    return click.option(
+        "--map-status",
+        "map_status",
+        type=str,
+        default="Status",
+        help="Notion column name for Status property.",
+    )
+
+
+def opt_notion_map_due():
+    return click.option(
+        "--map-due",
+        "map_due",
+        type=str,
+        default="Due Date",
+        help="Notion column name for Due Date property.",
+    )
+
+
+def opt_notion_status_done():
+    return click.option(
+        "--status-done",
+        "status_done",
+        multiple=True,
+        default=["Done"],
+        help="Values considered as Done (can be specified multiple times).",
+    )
+
+
+def opt_notion_status_todo():
+    return click.option(
+        "--status-todo",
+        "status_todo",
+        multiple=True,
+        default=["Not started"],
+        help="Values considered as To-do/pending (can be specified multiple times).",
+    )
+
+
+def opt_notion_status_kind():
+    return click.option(
+        "--status-kind",
+        "status_kind",
+        type=click.Choice(["status_prop", "select", "checkbox"], case_sensitive=False),
+        default="status_prop",
+        help="Type of property used for status tracking.",
+    )
+
+
 # gkeep ---------------------------------------------------------------------------------------
 def opts_gkeep():
     def decorator(f):
