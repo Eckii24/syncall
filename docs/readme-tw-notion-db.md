@@ -54,8 +54,8 @@ tw_notion_db_sync \
   --database-id <database-uuid> \
   -t mytasks \
   --status-kind select \
-  --status-done "Complete" \
-  --status-done "Finished"
+  --status-map "completed:Complete" \
+  --status-map "pending:In Progress"
 ```
 
 For databases using a Checkbox:
@@ -66,6 +66,8 @@ tw_notion_db_sync \
   -t mytasks \
   --status-kind checkbox
 ```
+
+Note: Default status mapping is `pending:Not started`, `completed:Done` if not specified.
 
 ### Project Synchronization
 
@@ -127,6 +129,8 @@ tw_notion_db_sync \
   --map-project "Project" \
   --map-priority "Priority" \
   --status-kind status_prop \
+  --status-map "completed:Done" \
+  --status-map "pending:Not started" \
   --project-kind select \
   --priority-map "H:🔴 High" \
   --priority-map "M:🟡 Medium" \
@@ -195,8 +199,7 @@ There are two ways `tw_notion_db_sync` can read the API token:
 - `--map-priority`: Notion column name for the Priority property (optional)
 - `--status-kind`: Type of status property - `status_prop`, `select`, or `checkbox` (default: "status_prop")
 - `--project-kind`: Type of project property - `select`, `multi_select`, or `relation` (default: "select")
-- `--status-done`: Value(s) considered as completed (can be specified multiple times, default: "Done")
-- `--status-todo`: Value(s) considered as pending (can be specified multiple times, default: "Not started")
+- `--status-map`: Status mapping in format "TW_STATUS:NOTION_VALUE" (e.g., "completed:Done", "pending:Not started"). Can be specified multiple times. Default: pending:Not started, completed:Done
 - `--priority-map`: Priority mapping in format "TW_PRIORITY:NOTION_VALUE" (e.g., "H:High"). Can be specified multiple times. Default: H:High, M:Medium, L:Low
 
 ### Saving Configurations

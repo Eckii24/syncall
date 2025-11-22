@@ -63,21 +63,16 @@ class NotionSideConfig:
     project_mapping_kind: ProjectMappingKind = ProjectMappingKind.SELECT
     """Defines how project is stored: select, multi_select, or relation."""
 
-    val_status_todo: list[str] = field(default_factory=list)
-    """Value(s) considered as pending."""
-
-    val_status_done: list[str] = field(default_factory=list)
-    """Value(s) considered as completed."""
+    status_map: dict[str, str] = field(default_factory=dict)
+    """Mapping from TaskWarrior status (pending/completed) to Notion select values."""
 
     priority_map: dict[str, str] = field(default_factory=dict)
     """Mapping from TaskWarrior priority (H/M/L) to Notion select values."""
 
     def __post_init__(self):
         """Initialize default values after dataclass initialization."""
-        if not self.val_status_todo:
-            self.val_status_todo = ["Not started"]
-        if not self.val_status_done:
-            self.val_status_done = ["Done"]
+        if not self.status_map:
+            self.status_map = {"pending": "Not started", "completed": "Done"}
         if not self.priority_map:
             self.priority_map = {"H": "High", "M": "Medium", "L": "Low"}
 
@@ -166,7 +161,8 @@ class NotionDbSide(SyncSide):
         ):
             # Native Status Property
             status_value = status_prop.get("status", {}).get("name", "")
-            return status_value in self._config.val_status_done
+            completed_value = self._config.status_map.get("completed", "")
+            return bool(status_value == completed_value)
 
         elif (
             prop_type == "select"
@@ -175,7 +171,9 @@ class NotionDbSide(SyncSide):
             # Select/Dropdown
             select_value = status_prop.get("select")
             if select_value:
-                return select_value.get("name", "") in self._config.val_status_done
+                status_name = select_value.get("name", "")
+                completed_value = self._config.status_map.get("completed", "")
+                return bool(status_name == completed_value)
             return False
 
         elif (
@@ -308,36 +306,26 @@ class NotionDbSide(SyncSide):
         :param is_completed: Whether the item is completed
         :return: Property dictionary
         """
+        status_value = (
+            self._config.status_map.get("completed")
+            if is_completed
+            else self._config.status_map.get("pending")
+        )
+
         if self._config.status_mapping_kind == StatusMappingKind.STATUS_PROP:
             # Native Status Property
-            status_name = (
-                self._config.val_status_done[0]
-                if is_completed
-                else self._config.val_status_todo[0]
-            )
-            return {"status": {"name": status_name}}
+            return {"status": {"name": status_value}}
 
         elif self._config.status_mapping_kind == StatusMappingKind.SELECT:
             # Select/Dropdown
-            select_name = (
-                self._config.val_status_done[0]
-                if is_completed
-                else self._config.val_status_todo[0]
-            )
-            return {"select": {"name": select_name}}
+            return {"select": {"name": status_value}}
 
         elif self._config.status_mapping_kind == StatusMappingKind.CHECKBOX:
             # Checkbox
             return {"checkbox": is_completed}
 
         # Default to status property
-        return {
-            "status": {
-                "name": self._config.val_status_done[0]
-                if is_completed
-                else self._config.val_status_todo[0],
-            },
-        }
+        return {"status": {"name": status_value}}
 
     def _create_due_property(self, due: datetime.datetime | None) -> dict:
         """Create a due date property for Notion API.

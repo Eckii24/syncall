@@ -89,15 +89,13 @@ def test_notion_db_side_init(mock_client):
     assert side._database_id == "test-db-id"
     # Test that default config is applied
     assert side._config.map_field_title == "Name"
-    assert side._config.val_status_done == ["Done"]
-    assert side._config.val_status_todo == ["Not started"]
+    assert side._config.status_map == {"pending": "Not started", "completed": "Done"}
 
 
 def test_notion_side_config_defaults():
     """Test NotionSideConfig default initialization."""
     config = NotionSideConfig()
-    assert config.val_status_done == ["Done"]
-    assert config.val_status_todo == ["Not started"]
+    assert config.status_map == {"pending": "Not started", "completed": "Done"}
     assert config.map_field_title == "Name"
     assert config.status_mapping_kind == StatusMappingKind.STATUS_PROP
 
@@ -108,7 +106,7 @@ def test_notion_db_side_with_custom_config(mock_client):
         map_field_title="Task Name",
         map_field_status="State",
         map_field_due="Deadline",
-        val_status_done=["Complete", "Finished"],
+        status_map={"pending": "To Do", "completed": "Complete"},
         status_mapping_kind=StatusMappingKind.SELECT,
     )
     side = NotionDbSide(mock_client, "test-db-id", config=config)
@@ -289,8 +287,7 @@ def test_create_status_property_select(mock_client):
     """Test creating status property with select type."""
     config = NotionSideConfig(
         status_mapping_kind=StatusMappingKind.SELECT,
-        val_status_done=["Complete"],
-        val_status_todo=["To Do"],
+        status_map={"pending": "To Do", "completed": "Complete"},
     )
     side = NotionDbSide(mock_client, "test-db-id", config=config)
 

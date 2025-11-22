@@ -50,9 +50,8 @@ from syncall.cli import (
     opt_notion_map_title,
     opt_notion_priority_map,
     opt_notion_project_kind,
-    opt_notion_status_done,
     opt_notion_status_kind,
-    opt_notion_status_todo,
+    opt_notion_status_map,
     opt_notion_token_pass_path,
     opts_miscellaneous,
     opts_tw_filtering,
@@ -69,8 +68,7 @@ from syncall.tw_notion_db_utils import convert_notion_db_to_tw, convert_tw_to_no
 @opt_notion_map_due()
 @opt_notion_map_project()
 @opt_notion_map_priority()
-@opt_notion_status_done()
-@opt_notion_status_todo()
+@opt_notion_status_map()
 @opt_notion_status_kind()
 @opt_notion_project_kind()
 @opt_notion_priority_map()
@@ -84,8 +82,7 @@ def main(
     map_due: str,
     map_project: str,
     map_priority: str,
-    status_done: tuple[str],
-    status_todo: tuple[str],
+    status_map: tuple[str],
     status_kind: str,
     project_kind: str,
     priority_map: tuple[str],
@@ -157,8 +154,7 @@ def main(
         map_due = app_config.get("map_due", map_due)
         map_project = app_config.get("map_project", map_project)
         map_priority = app_config.get("map_priority", map_priority)
-        status_done = app_config.get("status_done", status_done)
-        status_todo = app_config.get("status_todo", status_todo)
+        status_map = app_config.get("status_map", status_map)
         status_kind = app_config.get("status_kind", status_kind)
         project_kind = app_config.get("project_kind", project_kind)
         priority_map = app_config.get("priority_map", priority_map)
@@ -177,8 +173,7 @@ def main(
                 "map_due": map_due,
                 "map_project": map_project,
                 "map_priority": map_priority,
-                "status_done": list(status_done),
-                "status_todo": list(status_todo),
+                "status_map": list(status_map),
                 "status_kind": status_kind,
                 "project_kind": project_kind,
                 "priority_map": list(priority_map),
@@ -218,8 +213,7 @@ def main(
                 "Notion Due Field": map_due,
                 "Notion Project Field": map_project or "(Not configured)",
                 "Notion Priority Field": map_priority or "(Not configured)",
-                "Status Done Values": list(status_done),
-                "Status Todo Values": list(status_todo),
+                "Status Map": list(status_map) if status_map else "(Using defaults)",
                 "Status Kind": status_kind,
                 "Project Kind": project_kind,
                 "Priority Map": list(priority_map) if priority_map else "(Using defaults)",
@@ -276,6 +270,16 @@ def main(
     )
 
     # Create config
+    # Parse status map
+    parsed_status_map: dict[str, str] = {}
+    if status_map:
+        for mapping in status_map:
+            if ":" in mapping:
+                tw_status, notion_value = mapping.split(":", 1)
+                parsed_status_map[tw_status.strip()] = notion_value.strip()
+            else:
+                logger.warning(f"Invalid status mapping format: {mapping}, skipping")
+
     # Parse priority map
     parsed_priority_map: dict[str, str] = {}
     if priority_map:
@@ -292,8 +296,7 @@ def main(
         map_field_due=map_due,
         map_field_project=map_project if map_project else None,
         map_field_priority=map_priority if map_priority else None,
-        val_status_todo=list(status_todo),
-        val_status_done=list(status_done),
+        status_map=parsed_status_map if parsed_status_map else {},
         status_mapping_kind=StatusMappingKind(status_kind),
         project_mapping_kind=ProjectMappingKind(project_kind),
         priority_map=parsed_priority_map if parsed_priority_map else {},

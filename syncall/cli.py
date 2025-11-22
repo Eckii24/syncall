@@ -298,23 +298,15 @@ def opt_notion_map_due():
     )
 
 
-def opt_notion_status_done():
+def opt_notion_status_map():
     return click.option(
-        "--status-done",
-        "status_done",
+        "--status-map",
+        "status_map",
         multiple=True,
-        default=["Done"],
-        help="Values considered as Done (can be specified multiple times).",
-    )
-
-
-def opt_notion_status_todo():
-    return click.option(
-        "--status-todo",
-        "status_todo",
-        multiple=True,
-        default=["Not started"],
-        help="Values considered as To-do/pending (can be specified multiple times).",
+        help=(
+            'Status mapping in format "TW_STATUS:NOTION_VALUE" (e.g., "completed:Done",'
+            ' "pending:Not started"). Can be specified multiple times.'
+        ),
     )
 
 
